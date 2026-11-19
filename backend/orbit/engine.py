@@ -11,12 +11,14 @@ pure CPU scheduler; with them, resources couple into a cascade:
 Every decision writes an Event with a reason; that is the kernel log.
 """
 from .cpu_sched import Scheduler
+from .deadlock import find_cycle
 from .gpu import split, transfer_ticks
 import random
 
+from .locks import Detect
 from .models import Event, Task
 from .storage import track_of
-from .workload import HOT_PAGES, STORMS, make_task
+from .workload import DEADLOCK_STORM, HOT_PAGES, STORMS, make_deadlock_pair, make_task
 
 CRISIS_QUEUE = 16  # disk requests pending at once => "storage crisis" (normal peak is ~10)
 MAX_TICKS = 6000   # safety stop: extreme thrashing (FIFO + tiny RAM) can livelock forever
@@ -27,11 +29,12 @@ class Engine:
     MAX_TICKS = MAX_TICKS
 
     def __init__(self, tasks: list[Task], scheduler: Scheduler, pager=None, disk=None,
-                 vram=None, gpu=None, bus=None, placer=None):
+                 vram=None, gpu=None, bus=None, placer=None, deadlock=None):
         self.tasks = tasks
         self.sched = scheduler
         self.pager, self.disk, self.vram = pager, disk, vram
         self.gpu, self.bus, self.placer = gpu, bus, placer
+        self.deadlock = deadlock or Detect()   # what to do when lock-waiting tasks form a cycle
         self.now = 0
         self.running: Task | None = None
         self.slice_left: int | None = None
@@ -40,6 +43,10 @@ class Engine:
         self.crisis_at: int | None = None
         self.blocked: dict[int, Task] = {}   # waiting for disk
         self.vram_wait: list[Task] = []      # waiting for VRAM
+        self.lock_owner: dict[str, int] = {}  # lock name -> pid holding it
+        self.lock_wait: list[Task] = []      # waiting for a lock (each still holds the ones it already has)
+        self.deadlocked: list[int] = []      # pids in the wait-for cycle seen right now
+        self.deadlock_count = 0              # cycles detected so far
         self.log: list[Event] = []
         self.log_limit = LOG_LIMIT
         self.log_base = 0                    # events dropped so far: absolute index = log_base + position
@@ -75,6 +82,7 @@ class Engine:
             self._end_of_tick(task)
         self._tick_devices()
         self._watch_crisis()
+        self.watch_deadlock()
 
     def _end_of_tick(self, task: Task) -> None:
         if task.remaining <= task.gpu_work:          # the CPU part is complete
@@ -93,6 +101,7 @@ class Engine:
     def _finish(self, task: Task) -> None:
         task.finish = self.now
         self.emit("finish", task.id, f"turnaround={task.turnaround} wait={task.wait}")
+        self._release_locks(task)
         self._release_vram(task)
 
     def _admit(self) -> None:
@@ -133,9 +142,9 @@ class Engine:
                 if task.first_run is None:
                     task.first_run = self.now
                 self.emit("run", task.id, f"quantum={self.slice_left or 'until done'} ready={len(self.sched.ready)}")
-            if not self._page_fault(self.running):
+            if not (self._wait_for_lock(self.running) or self._page_fault(self.running)):
                 return
-            self.running = None  # it blocked on the disk; try the next ready task
+            self.running = None  # it blocked on a lock or the disk; try the next ready task
 
     def _tick_devices(self) -> None:
         if not self.gpu:
@@ -194,6 +203,51 @@ class Engine:
             self.emit("vram_grant", waiter.id, why)
             self.sched.wake(waiter)
 
+    def _wait_for_lock(self, task: Task) -> bool:
+        """Take the next lock this task is due for. True = it must wait (and keeps the locks it holds)."""
+        n = len(task.held)
+        if n >= len(task.locks) or task.burst - task.remaining < n * task.burst // len(task.locks):
+            return False
+        lock = task.locks[n]
+        owner = self.lock_owner.get(lock)
+        refusal = f"held by pid={owner}" if owner is not None else self.deadlock.refuse(self, task, lock)
+        if refusal is None:
+            self._grant_lock(task, lock, "lock")
+            return False
+        self.lock_wait.append(task)
+        self.emit("lock_wait", task.id, f"wants {lock} ({refusal}); holds {task.held or 'nothing'}")
+        return True
+
+    def _grant_lock(self, task: Task, lock: str, kind: str) -> None:
+        self.lock_owner[lock] = task.id
+        task.held.append(lock)
+        self.emit(kind, task.id, f"{'acquired' if kind == 'lock' else 'granted'} {lock}; holds {task.held}")
+
+    def _release_locks(self, task: Task) -> None:
+        for lock in task.held:
+            del self.lock_owner[lock]
+        task.held = []
+        for waiter in list(self.lock_wait):          # oldest waiter first
+            lock = waiter.locks[len(waiter.held)]
+            if lock not in self.lock_owner and self.deadlock.refuse(self, waiter, lock) is None:
+                self.lock_wait.remove(waiter)
+                self._grant_lock(waiter, lock, "lock_grant")
+                self.sched.wake(waiter)
+
+    def watch_deadlock(self) -> None:
+        """Wait-for graph: waiting task -> the task holding the lock it wants. A cycle is a deadlock."""
+        graph = {t.id: {self.lock_owner[t.locks[len(t.held)]]}
+                 for t in self.lock_wait if t.locks[len(t.held)] in self.lock_owner}
+        cycle = find_cycle(graph)
+        members = sorted(set(cycle)) if cycle else []
+        if members and members != self.deadlocked:
+            self.deadlock_count += 1
+            self.emit("deadlock", info="wait-for cycle " + " -> ".join(f"pid={p}" for p in cycle))
+            self.deadlocked = members
+            self.deadlock.resolve(self, members)
+        elif not members:
+            self.deadlocked = []
+
     def _watch_crisis(self) -> None:
         if self.disk and self.crisis_at is None and self.disk.pending >= CRISIS_QUEUE:
             self.crisis_at = self.now
@@ -210,16 +264,25 @@ class Engine:
         rng = random.Random(self.now * 1_000_003 + self.injections)
         first = max((t.id for t in self.tasks), default=-1) + 1
         new = [make_task(rng, first + i, kind, self.now) for i in range(n)]
-        self.tasks.extend(new)
-        self._pending = sorted(self._pending + new, key=lambda t: (t.arrival, t.id))
-        ids = [t.id for t in new]
+        ids = self._add_tasks(new)
         self.emit("inject", info=f"{n} {kind} task(s) pids {ids[0]}..{ids[-1]}")
         return ids
 
+    def _add_tasks(self, new: list[Task]) -> list[int]:
+        self.tasks.extend(new)
+        self._pending = sorted(self._pending + new, key=lambda t: (t.arrival, t.id))
+        return [t.id for t in new]
+
     def storm(self, name: str) -> list[int]:
-        """A named surge: ai-burst, compile-storm or swap-storm."""
+        """A named surge: ai-burst, compile-storm, swap-storm, or deadlock-demo (two jobs, locks in opposite order)."""
+        if name == DEADLOCK_STORM:
+            self.injections += 1
+            rng = random.Random(self.now * 1_000_003 + self.injections)
+            ids = self._add_tasks(make_deadlock_pair(rng, max((t.id for t in self.tasks), default=-1) + 1, self.now))
+            self.emit("inject", info=f"{name}: pids {ids[0]} and {ids[1]} take locks db/cache in opposite order")
+            return ids
         if name not in STORMS:
-            raise ValueError(f"unknown storm {name!r}; use one of {sorted(STORMS)}")
+            raise ValueError(f"unknown storm {name!r}; use one of {sorted([*STORMS, DEADLOCK_STORM])}")
         ids = []
         for kind, n in STORMS[name].items():
             ids += self.inject(kind, n)
@@ -249,7 +312,7 @@ class Engine:
                     self.sched.wake(waiter)
                 self._grant_vram_waiters("VRAM grew")
 
-    def kill(self, task_id: int) -> None:
+    def kill(self, task_id: int, why: str = "") -> None:
         """Terminate a process wherever it is (ready, running, blocked, on the bus or the GPU)."""
         task = next((t for t in self.tasks if t.id == task_id), None)
         if task is None:
@@ -261,6 +324,7 @@ class Engine:
         self.sched.ready = [t for t in self.sched.ready if same(t)]
         self._pending = [t for t in self._pending if same(t)]
         self.vram_wait = [t for t in self.vram_wait if same(t)]
+        self.lock_wait = [t for t in self.lock_wait if same(t)]
         self.blocked.pop(task_id, None)
         if self.running is task:
             self.running, self.slice_left = None, None
@@ -277,7 +341,9 @@ class Engine:
         if self.pager:
             self.pager.free_task(task_id)
         task.killed, task.finish = True, self.now
-        self.emit("kill", task_id, f"killed while {state}; its RAM pages and VRAM were freed")
+        self.emit("kill", task_id, f"killed while {state}" + (f" ({why})" if why else "") +
+                                   "; its RAM pages, VRAM and locks were freed")
+        self._release_locks(task)
         self._release_vram(task)
 
     def boost(self, task_id: int, priority: int) -> None:
@@ -302,6 +368,8 @@ class Engine:
             return "blocked:disk"
         if in_(self.vram_wait):
             return "wait:vram"
+        if in_(self.lock_wait):
+            return "wait:lock"
         if self.bus and (self.bus.current is task or in_(t for t, _ in self.bus.queue)):
             return "xfer"
         if self.gpu and (self.gpu.current is task or in_(self.gpu.queue)):
@@ -318,6 +386,9 @@ class Engine:
             "ready": len(self.sched.ready),
             "blocked": len(self.blocked),
             "vram_wait": len(self.vram_wait),
+            "lock_wait": len(self.lock_wait),
+            "deadlocked": list(self.deadlocked),
+            "stuck": self.stuck,
             "ram_used": len(self.pager.resident) if self.pager else 0,
             "ram_total": self.pager.frames if self.pager else 0,
             "vram_used": self.vram.used if self.vram else 0,
@@ -330,6 +401,7 @@ class Engine:
         if detail:
             snap["ram_frames"] = [list(key) for key in self.pager.resident] if self.pager else []  # [task, page], oldest first
             snap["vram_held"] = dict(self.vram.held) if self.vram else {}                           # task -> frames
+            snap["locks"] = dict(self.lock_owner)                                                    # lock -> pid
             snap["bus_task"] = self.bus.current.id if self.bus and self.bus.current else None
             snap["disk"] = {
                 "head": self.disk.head,
@@ -339,11 +411,19 @@ class Engine:
         return snap
 
     @property
+    def stuck(self) -> bool:
+        """Only lock-waiters are left, so nothing can ever release a lock: a real deadlock hang."""
+        busy = (self._pending or self.running or self.sched.ready or self.blocked or self.vram_wait
+                or (self.bus and (self.bus.current or self.bus.queue))
+                or (self.gpu and (self.gpu.current or self.gpu.queue)))
+        return bool(self.lock_wait) and not busy
+
+    @property
     def timed_out(self) -> bool:
-        return not self.done and self.now >= self.MAX_TICKS
+        return not self.done and (self.stuck or self.now >= self.MAX_TICKS)
 
     def run(self, until: int | None = None) -> "Engine":
         """Run to completion, or to `until`. MAX_TICKS stops a thrashing machine that can never finish."""
-        while not self.done and self.now < self.MAX_TICKS and (until is None or self.now < until):
+        while not self.done and not self.stuck and self.now < self.MAX_TICKS and (until is None or self.now < until):
             self.step()
         return self

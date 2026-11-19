@@ -61,6 +61,7 @@ class Policies(BaseModel):
     page: str | None = None
     disk: str | None = None
     place: str | None = None
+    deadlock: str | None = None
 
 
 class NewSession(Policies):

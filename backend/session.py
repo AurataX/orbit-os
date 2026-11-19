@@ -6,6 +6,7 @@ from threading import RLock
 
 from orbit.compare import DEFAULT, RAM_FRAMES, VRAM_FRAMES, build_engine
 from orbit.cpu_sched import POLICIES
+from orbit.locks import DEADLOCK_POLICIES
 from orbit.logfmt import LEVEL, SUBSYSTEM, format_event
 from orbit.memory import PAGE_POLICIES
 from orbit.metrics import p95, summarize
@@ -14,7 +15,8 @@ from orbit.recorder import Recorder, replay
 from orbit.storage import DISK_POLICIES
 from orbit.workload import generate
 
-REGISTRIES = {"cpu": POLICIES, "page": PAGE_POLICIES, "disk": DISK_POLICIES, "place": PLACERS}
+REGISTRIES = {"cpu": POLICIES, "page": PAGE_POLICIES, "disk": DISK_POLICIES, "place": PLACERS,
+              "deadlock": DEADLOCK_POLICIES}
 LIVE = {
     "inject": "inject", "storm": "storm", "resize": "resize",
     "kill": "kill", "boost": "boost",
@@ -31,7 +33,7 @@ def validate_policies(choices):
 def policies(engine):
     return {
         "cpu": engine.sched.name, "page": engine.pager.policy.name,
-        "disk": engine.disk.policy.name, "place": engine.placer.name,
+        "disk": engine.disk.policy.name, "place": engine.placer.name, "deadlock": engine.deadlock.name,
     }
 
 
@@ -229,7 +231,7 @@ class Session:
                     self.change(kind, args, branch_id, inherited=True)
                 except ValueError as exc:
                     self.record(tick, f"skipped {kind}", args, str(exc), branch_id)
-            if branch.done or engine.now >= engine.MAX_TICKS or engine.now >= until:
+            if branch.done or engine.stuck or engine.now >= engine.MAX_TICKS or engine.now >= until:
                 break
             engine.step()
             if engine.now % branch.recorder.every == 0:
@@ -242,7 +244,7 @@ class Session:
             branch.policy_effects.clear()
             self.action_version += 1
         if branch_id == self.active and (branch.done or engine.timed_out):
-            self.stop("Playback stopped at the tick cap" if engine.timed_out else "Playback completed the branch")
+            self.stop("Playback stopped: deadlock, nothing can run" if engine.stuck else "Playback stopped at the tick cap" if engine.timed_out else "Playback completed the branch")
         if action:
             self.record(start, action, params or {}, (
                 f"Tick {start} → {engine.now} · page faults {faults} → {engine.pager.faults}"

@@ -24,7 +24,7 @@ Legend: [x] done, [ ] todo. Update as you go.
 - [x] Metrics: faults, disk busy, head movement, GPU stall, crisis tick, interactive p95 response AND turnaround
 - [x] Crisis marker: disk queue >= 16 (normal peak ~10)
 - [ ] Optimal page replacement as a baseline (needs future knowledge; refs are already known per task)
-- [ ] Wire deadlock detection into the engine (needs tasks that hold-and-wait on several resources)
+- [x] Wire deadlock into the engine: `locks.py` (db/cache/log, hold-and-wait), wait-for-graph detection every tick, policies IGNORE / DETECT (kill cheapest victim) / AVOID (Banker's); `deadlock-demo` storm; `wait:lock` state, `lock` log subsystem, `deadlocks` metric, stall detection (`stuck`)
 - [ ] Starvation metric for background tasks
 
 ## Phase 3 — GPU, placement, kernel log, record / rewind / replay (DONE, 32 tests)
@@ -58,7 +58,6 @@ Legend: [x] done, [ ] todo. Update as you go.
 ## Phase 5 — Placement and polish
 - [ ] Interference analysis report (which class slowed which, per resource)
 - [ ] Multi-core CPU option
-- [ ] Wire Banker's / wait-for graph into the engine
 - [ ] `Dockerfile` (optional Cloud Run)
 - [ ] Demo script rehearsed (`docs/demo.md`)
 - [ ] Viva notes: one page per module

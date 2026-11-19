@@ -10,6 +10,7 @@ import copy
 from .cpu_sched import POLICIES as CPU_POLICIES
 from .engine import Engine
 from .gpu import GPU, Bus
+from .locks import DEADLOCK_POLICIES
 from .logfmt import dmesg
 from .memory import PAGE_POLICIES, VRAM, Pager
 from .metrics import summarize
@@ -19,14 +20,15 @@ from .storage import DISK_POLICIES, Disk
 from .workload import generate
 
 RAM_FRAMES, VRAM_FRAMES = 60, 16
-DEFAULT = {"cpu": "MLFQ", "page": "LRU", "disk": "SCAN", "place": "ADAPTIVE"}
+DEFAULT = {"cpu": "MLFQ", "page": "LRU", "disk": "SCAN", "place": "ADAPTIVE", "deadlock": "DETECT"}
 
 
 def build_engine(tasks, cpu="MLFQ", page="LRU", disk="SCAN", place="ADAPTIVE",
-                 ram=RAM_FRAMES, vram=VRAM_FRAMES) -> Engine:
+                 deadlock="DETECT", ram=RAM_FRAMES, vram=VRAM_FRAMES) -> Engine:
     """A fresh machine over its own copy of the tasks (shared by CLI and API)."""
     return Engine(copy.deepcopy(tasks), CPU_POLICIES[cpu](), Pager(ram, PAGE_POLICIES[page]()),
-                  Disk(DISK_POLICIES[disk]()), VRAM(vram), GPU(), Bus(), PLACERS[place]())
+                  Disk(DISK_POLICIES[disk]()), VRAM(vram), GPU(), Bus(), PLACERS[place](),
+                  DEADLOCK_POLICIES[deadlock]())
 
 
 def compare(seed: int, n_tasks: int = 40) -> dict[str, list[dict]]:

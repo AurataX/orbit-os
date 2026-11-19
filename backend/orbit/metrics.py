@@ -20,6 +20,7 @@ def summarize(e: Engine) -> dict:
         "makespan": e.now,
         "unfinished": sum(1 for t in e.tasks if t.finish is None),
         "killed": sum(1 for t in e.tasks if t.killed),
+        "deadlocks": e.deadlock_count,
         "cpu_util_%": round(100 * e.busy_ticks / e.now, 1),
         "page_faults": e.pager.faults if e.pager else 0,
         "disk_busy": e.disk.busy_ticks if e.disk else 0,

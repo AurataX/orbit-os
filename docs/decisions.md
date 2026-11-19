@@ -47,3 +47,6 @@ Events stamped with tick T come from the step that starts at `now == T`, so they
 
 ## D12 — Priority policy is not a fair rival (note)
 Task priority is derived from workload class, so Priority "knows" which tasks are interactive. MLFQ must discover it. Say this when presenting the table.
+
+## D17 — Deadlock is a policy, and only appears when asked for
+Tasks may carry `locks` (db, cache, log), taken in order and held until finish (hold-and-wait). The engine observes: each tick it builds the wait-for graph and runs `find_cycle`. The policy decides what to do: IGNORE (nothing; the machine hangs, detected by `Engine.stuck`), DETECT (kill the victim with the least work done), AVOID (Banker's algorithm over the locks). The seed workload has no locks, so every earlier number (999 -> 421) is unchanged; the `deadlock-demo` storm injects two jobs that take db/cache in opposite order. Honest limit: AVOID must act before the unsafe grant. Rewind to before it and switch to AVOID, or switch to DETECT after the hang.

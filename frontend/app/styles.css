@@ -361,7 +361,14 @@ select, input:not([type=range]) { color: var(--text); background: var(--deep); b
 .inspect-events:empty { display: none; }
 .inspect-events li { display: flex; gap: 5px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .inspect-events li > span { color: var(--accent); }
-.drawer { width: min(830px, calc(100vw - 24px)); margin: auto auto min(4dvh, 22px); }
+.drawer { position: fixed; z-index: 30; width: min(830px, calc(100vw - 24px)); margin: 0; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.drawer.moved { transform: none; }
+.drawer.full { left: 0; top: 0; transform: none; width: 100vw; max-width: none; height: 100dvh; max-height: none; border-radius: 0; display: flex; flex-direction: column; }
+.drawer.full .terminal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.drawer.full .terminal-output, .drawer.full .kernel-list { flex: 1; height: auto; min-height: 0; max-height: none; }
+.dialog-head.grabbable { cursor: grab; user-select: none; touch-action: none; }
+.dialog-head.grabbable:active { cursor: grabbing; }
+.dialog-actions { display: flex; gap: 6px; }
 .terminal-tabs { padding: 8px 12px 0; }
 .terminal-body { padding: 9px 12px 12px; }
 .terminal-shortcuts { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 7px; }

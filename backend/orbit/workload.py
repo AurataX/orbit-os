@@ -33,6 +33,20 @@ STORMS = {
 }
 
 
+DEADLOCK_STORM = "deadlock-demo"
+
+
+def make_deadlock_pair(rng: random.Random, first_id: int, arrival: int) -> list[Task]:
+    """Two build jobs taking the same two locks in opposite order: the classic deadlock recipe.
+    They are CPU-only so the lock story is not mixed up with GPU placement."""
+    pair = []
+    for i, locks in enumerate((("db", "cache"), ("cache", "db"))):
+        task = make_task(rng, first_id + i, DEV, arrival)
+        task.locks, task.vram_need = locks, 0
+        pair.append(task)
+    return pair
+
+
 def make_task(rng: random.Random, task_id: int, kind: str, arrival: int) -> Task:
     lo, hi = MIX[kind][1]
     burst = rng.randint(lo, hi)

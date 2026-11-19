@@ -8,6 +8,7 @@ import copy
 
 from .cpu_sched import POLICIES as CPU_POLICIES
 from .engine import Engine
+from .locks import DEADLOCK_POLICIES
 from .memory import PAGE_POLICIES
 from .placement import PLACERS
 from .storage import DISK_POLICIES
@@ -26,7 +27,7 @@ class Recorder:
 
     def run(self, until: int | None = None) -> Engine:
         e = self.engine
-        while not e.done and e.now < e.MAX_TICKS and (until is None or e.now < until):
+        while not e.done and not e.stuck and e.now < e.MAX_TICKS and (until is None or e.now < until):
             e.step()
             if e.now % self.every == 0:
                 self.save()
@@ -38,7 +39,7 @@ class Recorder:
         return copy.deepcopy(self.checkpoints[at])
 
 
-def replay(engine: Engine, cpu=None, page=None, disk=None, place=None) -> Engine:
+def replay(engine: Engine, cpu=None, page=None, disk=None, place=None, deadlock=None) -> Engine:
     """Swap policies on a (rewound) engine. The past is kept; the new policy rules from now on.
 
     Placement only affects tasks that have not arrived yet (already-placed tasks keep their device).
@@ -61,4 +62,10 @@ def replay(engine: Engine, cpu=None, page=None, disk=None, place=None) -> Engine
         new = PLACERS[place]()
         engine.emit("policy", info=f"placement {engine.placer.name} -> {new.name} (for tasks arriving later)")
         engine.placer = new
+    if deadlock:
+        new = DEADLOCK_POLICIES[deadlock]()
+        engine.emit("policy", info=f"deadlock {engine.deadlock.name} -> {new.name}")
+        engine.deadlock = new
+        engine.deadlocked = []                   # an existing cycle is now the new policy's problem
+        engine.watch_deadlock()
     return engine

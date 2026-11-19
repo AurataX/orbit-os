@@ -50,6 +50,6 @@ python3 -m orbit.compare --seed 42                          # who did better
 ```
 
 ## Status
-Phases 1–4 are complete. The stdlib engine has 48 tests. The web layer adds a FastAPI session API, live Next.js dashboard, ORBIT shell, action log, and branch comparison with API tests. Run `make test` and see `docs/task.md` for open items.
+Phases 1–4 are complete. The stdlib engine has 79 tests (incl. locks and deadlock). The web layer adds a FastAPI session API, live Next.js dashboard, ORBIT shell, action log, and branch comparison with API tests. Run `make test` and see `docs/task.md` for open items.
 
-Known limits (be honest about these): GPU is an Amdahl-style model (parallel fraction + speed factor), not instruction-level; deadlock tools are not wired into the engine; Optimal page replacement not implemented; Priority "knows" the class via task priority; Adaptive placement is a heuristic and does not beat always-GPU on every metric; the event log keeps only the newest 10000 events.
+Known limits (be honest about these): GPU is an Amdahl-style model (parallel fraction + speed factor), not instruction-level; deadlock is simulated with named locks (db/cache/log) and only appears when you inject the `deadlock-demo` storm (the seed workload has no locks); Optimal page replacement not implemented; Priority "knows" the class via task priority; Adaptive placement is a heuristic and does not beat always-GPU on every metric; the event log keeps only the newest 10000 events.

@@ -5,7 +5,7 @@ import { ArrowRight, CornerDownLeft, Link2 } from "lucide-react";
 import { useData, type Event, type Store } from "./data";
 import { Dialog } from "./ui";
 
-const subsystems = ["all", "sched", "nexus", "mm", "disk", "vram", "bus", "gpu", "kernel"];
+const subsystems = ["all", "sched", "nexus", "mm", "disk", "vram", "bus", "gpu", "lock", "kernel"];
 const shellShortcuts = ["top", "free", "iostat", "gpustat", "dmesg nexus 10", "help"];
 
 function related(events: Event[], selected: Event) {

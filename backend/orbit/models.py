@@ -19,6 +19,8 @@ class Task:
     placement: str = "cpu"                         # cpu | gpu | hybrid (decided on arrival)
     gpu_work: int = 0                              # work units that leave the CPU for the GPU
     gpu_left: int = 0                              # GPU ticks still needed once it gets there
+    locks: tuple = ()                              # locks it will take, in this order (hold-and-wait)
+    held: list = field(default_factory=list)       # locks it holds right now
     remaining: int = field(init=False)
     first_run: int | None = None   # tick of first CPU slice (response time)
     finish: int | None = None

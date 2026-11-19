@@ -133,6 +133,7 @@ export function Scenarios({ store, mutate, disabled }: { store: Store; mutate: M
           ["ai-burst", "AI burst", "4 AI jobs compete for VRAM and transfer time."],
           ["compile-storm", "Compile storm", "8 build jobs compete for CPU and storage."],
           ["swap-storm", "Swap storm", "6 build jobs and 6 background jobs add RAM pressure."],
+          ["deadlock-demo", "Deadlock demo", "2 jobs take locks db and cache in opposite order and wait on each other."],
         ].map(([name, label, detail]) => <div key={name} className="scenario">
           <h3>{label}</h3><p>{detail}</p><button className="button compact" type="button" disabled={disabled}
             onClick={() => void mutate("storm", { name })}><Zap size={14} /> Trigger surge</button>

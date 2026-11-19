@@ -25,5 +25,6 @@ Phases 1–4 are complete, including the simulator, FastAPI, Next.js dashboard, 
 python3 -m orbit.compare --seed 42                                   # who did better, per policy dimension
 python3 -m orbit.compare --seed 42 --rewind cpu=MLFQ page=LRU disk=SCAN   # crisis -> rewind -> swap -> replay
 python3 -m orbit.logfmt --seed 42 --grep nexus --tail 20             # kernel log (dmesg)
+# deadlock demo: in the shell run  storm deadlock-demo  then  set deadlock=IGNORE|DETECT|AVOID
 python3 -m orbit.logfmt --seed 42 --at 60 --ps                       # process table at tick 60
 ```

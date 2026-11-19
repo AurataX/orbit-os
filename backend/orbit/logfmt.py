@@ -13,8 +13,9 @@ SUBSYSTEM = {
     "vram_wait": "vram", "vram_grant": "vram", "xfer": "bus",
     "gpu_queue": "gpu", "gpu_run": "gpu", "crisis": "kernel", "policy": "kernel",
     "inject": "kernel", "resize": "mm", "kill": "sched", "boost": "sched",
+    "lock": "lock", "lock_wait": "lock", "lock_grant": "lock", "deadlock": "lock",
 }
-LEVEL = {"vram_wait": "WARN", "crisis": "CRIT", "kill": "WARN"}
+LEVEL = {"vram_wait": "WARN", "crisis": "CRIT", "kill": "WARN", "lock_wait": "WARN", "deadlock": "CRIT"}
 
 
 def format_event(ev, kinds: dict[int, str]) -> str:

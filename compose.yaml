@@ -1,0 +1,9 @@
+services:
+  orbit:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Read from the .env file next to this one (see .env.example). Never commit the real token.
+      ORBIT_TOKEN: ${ORBIT_TOKEN:?Set ORBIT_TOKEN in .env, for example ORBIT_TOKEN=$(openssl rand -hex 24)}
+    restart: unless-stopped

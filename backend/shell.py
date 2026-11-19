@@ -11,9 +11,10 @@ HELP = [
     "new --seed 42 --cpu MLFQ --page LRU --disk SCAN --place ADAPTIVE [--ram N --vram N]",
     "step [n]   run [until]   top / ps   free   iostat   gpustat",
     "dmesg [grep] [tail]   checkpoint   rewind <tick>",
-    "set cpu=X page=Y disk=Z place=W   compare   whatif cpu=X page=Y disk=Z   clear",
+    "set cpu=X page=Y disk=Z place=W deadlock=IGNORE|DETECT|AVOID   compare   whatif ...   clear",
+    "storm ai-burst|compile-storm|swap-storm|deadlock-demo",
 ]
-MUTATING = {"new", "step", "run", "checkpoint", "rewind", "set"}
+MUTATING = {"new", "step", "run", "checkpoint", "rewind", "set", "storm"}
 
 
 def words_for(line):
@@ -46,7 +47,7 @@ def run_command(session, line) -> list[str]:
     lengths = {"help": (0, 0), "step": (0, 1), "run": (0, 1), "top": (0, 0), "ps": (0, 0),
                "free": (0, 0), "iostat": (0, 0), "gpustat": (0, 0), "dmesg": (0, 2),
                "checkpoint": (0, 0), "rewind": (1, 1), "set": (1, 4), "compare": (0, 0),
-               "whatif": (1, 4)}
+               "whatif": (1, 4), "storm": (1, 1)}
     if cmd in lengths and not lengths[cmd][0] <= len(args) <= lengths[cmd][1]:
         raise ValueError(f"orbit: wrong number of arguments to {cmd} (try help)")
     if cmd in ("compare", "whatif"):
@@ -71,7 +72,7 @@ def session_command(session, cmd, args):
                 raise ValueError("new expects --option value pairs")
             for name, value in zip(args[::2], args[1::2]):
                 key = name.removeprefix("--")
-                if name not in {"--" + k for k in (*keys, "cpu", "page", "disk", "place")}:
+                if name not in {"--" + k for k in (*keys, "cpu", "page", "disk", "place", "deadlock")}:
                     raise ValueError(f"Unknown new option {name!r}")
                 config[keys.get(key, key)] = number(value) if key in keys else value
             session.reset(config_for(**config))
@@ -88,7 +89,7 @@ def session_command(session, cmd, args):
                     raise ValueError(f"Run target must be between 0 and {engine.MAX_TICKS}")
             session.stop("Playback paused for a shell command")
             session.advance(until, action=cmd, params={"until": until})
-            state = " · thrashing cap" if engine.timed_out else " · finished" if session.branch.done else ""
+            state = " · DEADLOCK: nothing can run" if engine.stuck else " · thrashing cap" if engine.timed_out else " · finished" if session.branch.done else ""
             return [f"Tick {engine.now}{state}"]
         case "top" | "ps":
             return [f"Tick {engine.now}", *ps(engine)]
@@ -115,6 +116,10 @@ def session_command(session, cmd, args):
             if not 1 <= tail <= 10000:
                 raise ValueError("Tail must be between 1 and 10000")
             return dmesg(engine, grep, tail) or ["No matching kernel events."]
+        case "storm":
+            session.stop("Playback paused for the shell command")
+            ids = session.change("storm", {"name": args[0]})
+            return [f"Storm {args[0]} injected at tick {engine.now}: pids {ids[0]}..{ids[-1]}"]
         case "checkpoint":
             return [f"Checkpoint saved at tick {session.checkpoint()}"]
         case "rewind":
