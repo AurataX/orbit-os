@@ -1,0 +1,28 @@
+# Glossary
+
+- **Tick**: one unit of simulated time.
+- **Burst**: CPU ticks a task needs in total.
+- **Wait time**: turnaround − burst (time spent ready but not running; with I/O blocking this definition will be extended).
+- **Turnaround**: finish − arrival.
+- **Response time**: first run − arrival. Key metric for interactive tasks.
+- **p95**: value below which 95% of samples fall; shows tail latency, not just the average.
+- **Makespan**: tick when the last task finishes.
+- **Quantum**: max ticks a task may run before preemption (RR, MLFQ).
+- **Preemption**: taking the CPU from a running task.
+- **MLFQ**: multi-level feedback queue; new tasks start at the top, tasks that use a full quantum sink a level.
+- **Starvation**: a task that is ready but never (or very rarely) gets resources.
+- **Paging**: splitting memory into fixed frames; tasks use pages mapped to frames.
+- **Page fault**: access to a page not in a frame; must load it (disk I/O).
+- **Replacement policy**: FIFO, LRU, Optimal: which page to evict.
+- **Belady's anomaly**: FIFO can fault more with more frames.
+- **Swap**: moving pages between RAM and disk.
+- **VRAM**: GPU memory; separate pool from RAM; CPU<->GPU transfers cost time.
+- **Disk scheduling**: FCFS, SSTF (shortest seek), SCAN (elevator).
+- **Deadlock**: processes waiting in a cycle for resources held by each other.
+- **Banker's algorithm**: avoids deadlock by granting requests only if a safe sequence exists.
+- **Wait-for graph**: graph of who waits for whom; a cycle means deadlock.
+- **Cascade**: pressure in one resource causing slowdown in another.
+- **Crisis**: threshold crossing we mark in the log (e.g. interactive p95 over limit, deadlock).
+- **Checkpoint**: a saved copy of full engine state at a tick.
+- **Counterfactual replay**: rewind to a checkpoint, change policy, replay the same future workload.
+- **NEXUS**: nickname of the CPU/GPU placement layer.
