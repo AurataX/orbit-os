@@ -52,6 +52,7 @@ Legend: [x] done, [ ] todo. Update as you go.
 - [x] Live stress, resize, priority, and termination controls backed by the engine
 - [x] Branch delta comparison, sortable policy tables, challenge mode, JSON and CSV export
 - [x] Light/dark, reduced motion, and phone-width layout
+- [x] ORBIT Shell opens bottom-center. Verified in the Docker build with dragging, fullscreen, and reopening.
 - [x] API tests and local Chromium demo verification
 - [ ] Verify the public tunnel on a physical phone when hosting the demo
 
