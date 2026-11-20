@@ -391,6 +391,16 @@ def api_not_found(path: str):
     raise HTTPException(404, "Unknown API route.")
 
 
+@app.middleware("http")
+async def cache_built_assets(request: Request, call_next):
+    # Why: /_next/static files are content-hashed, so the browser may keep them forever.
+    # Without this every visit refetches them, and a slow cold start leaves the page unstyled.
+    response = await call_next(request)
+    if request.url.path.startswith("/_next/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
 static = Path(__file__).resolve().parents[1] / "frontend" / "out"
 if static.is_dir():
     app.mount("/", StaticFiles(directory=static, html=True), name="dashboard")
